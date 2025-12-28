@@ -271,16 +271,26 @@ func buildDesiredSettings(token string, enableStatusLine bool) map[string]any {
 
 	// Add status line if enabled
 	if enableStatusLine {
-		// Find costa binary path
-		costaPath, err := exec.LookPath("costa")
+		// Use current executable path to support embedded CLI scenarios (e.g., VS Code extension)
+		costaPath, err := os.Executable()
 		if err != nil {
-			// Fallback to common install location
-			costaPath = "costa"
+			// Fallback to PATH lookup
+			costaPath, err = exec.LookPath("costa")
+			if err != nil {
+				// Last resort fallback
+				costaPath = "costa"
+			}
+		}
+
+		// Quote path if it contains spaces or quotes to be shell-safe
+		quotedPath := costaPath
+		if strings.ContainsAny(quotedPath, " \t\"") {
+			quotedPath = "\"" + strings.ReplaceAll(quotedPath, "\"", "\\\"") + "\""
 		}
 
 		settings["statusLine"] = map[string]any{
 			"type":    "command",
-			"command": costaPath + " status --format claude-code",
+			"command": quotedPath + " status --format claude-code",
 			"padding": 0,
 		}
 	}

@@ -397,8 +397,8 @@ func TestSetupClaudeCode_FormatJSON(t *testing.T) {
 		if slType, ok := statusLine["type"].(string); !ok || slType != "command" {
 			t.Errorf("Expected statusLine.type to be 'command', got: %v", statusLine["type"])
 		}
-		if cmd, ok := statusLine["command"].(string); !ok || !strings.Contains(cmd, "costa status") {
-			t.Errorf("Expected statusLine.command to contain 'costa status', got: %v", statusLine["command"])
+		if cmd, ok := statusLine["command"].(string); !ok || !strings.Contains(cmd, " status --format claude-code") {
+			t.Errorf("Expected statusLine.command to contain ' status --format claude-code', got: %v", statusLine["command"])
 		}
 	}
 }
