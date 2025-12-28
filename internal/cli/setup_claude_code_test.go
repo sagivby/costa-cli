@@ -350,22 +350,22 @@ func TestSetupClaudeCode_FormatJSON(t *testing.T) {
 	}
 
 	// Verify data field
-	data, ok := result["data"].(map[string]any)
+	resData, ok := result["data"].(map[string]any)
 	if !ok {
 		t.Fatalf("Expected data field to be an object, got: %v", result["data"])
 	}
 
 	// Verify data contains expected fields
-	if message, ok := data["message"].(string); !ok || message == "" {
-		t.Errorf("Expected message in data, got: %v", data["message"])
+	if message, ok := resData["message"].(string); !ok || message == "" {
+		t.Errorf("Expected message in data, got: %v", resData["message"])
 	}
 
-	if changed, ok := data["changed"].(bool); !ok || !changed {
-		t.Errorf("Expected changed to be true, got: %v", data["changed"])
+	if changed, ok := resData["changed"].(bool); !ok || !changed {
+		t.Errorf("Expected changed to be true, got: %v", resData["changed"])
 	}
 
-	if configPath, ok := data["config_path"].(string); !ok || configPath != settingsPath {
-		t.Errorf("Expected config_path to be %s, got: %v", settingsPath, data["config_path"])
+	if configPath, ok := resData["config_path"].(string); !ok || configPath != settingsPath {
+		t.Errorf("Expected config_path to be %s, got: %v", settingsPath, resData["config_path"])
 	}
 
 	// Verify no human-readable output
@@ -376,6 +376,30 @@ func TestSetupClaudeCode_FormatJSON(t *testing.T) {
 	// Verify config file was created
 	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
 		t.Errorf("Expected config file to be created at: %s", settingsPath)
+	}
+
+	// Verify config contents include statusLine
+	settingsData, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("Failed to read settings: %v", err)
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal(settingsData, &settings); err != nil {
+		t.Fatalf("Failed to parse settings: %v", err)
+	}
+
+	// Verify statusLine is configured when using --format json
+	statusLine, hasStatusLine := settings["statusLine"].(map[string]any)
+	if !hasStatusLine {
+		t.Errorf("Expected statusLine to be configured with --format json, but it's missing")
+	} else {
+		if slType, ok := statusLine["type"].(string); !ok || slType != "command" {
+			t.Errorf("Expected statusLine.type to be 'command', got: %v", statusLine["type"])
+		}
+		if cmd, ok := statusLine["command"].(string); !ok || !strings.Contains(cmd, "costa status") {
+			t.Errorf("Expected statusLine.command to contain 'costa status', got: %v", statusLine["command"])
+		}
 	}
 }
 

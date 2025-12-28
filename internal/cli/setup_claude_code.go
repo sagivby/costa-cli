@@ -113,6 +113,8 @@ func runSetupClaudeCode(cmd *cobra.Command, args []string) error {
 }
 
 func buildApplyOpts(scope integrations.Scope) integrations.ApplyOpts {
+	isJSONMode := ccSetupFormat == "json"
+
 	return integrations.ApplyOpts{
 		Scope:            scope,
 		TokenOverride:    ccSetupToken,
@@ -121,7 +123,7 @@ func buildApplyOpts(scope integrations.Scope) integrations.ApplyOpts {
 		DryRun:           ccSetupDryRun,
 		BackupDir:        ccSetupBackupDir,
 		RequireInstalled: ccSetupRequireInstalled,
-		EnableStatusLine: ccSetupEnableStatusLine,
+		EnableStatusLine: ccSetupEnableStatusLine || isJSONMode,
 		SkipStatusLine:   ccSetupSkipStatusLine,
 	}
 }
