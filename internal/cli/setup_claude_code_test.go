@@ -236,6 +236,207 @@ func TestSetupClaudeCode_RefreshTokenOnly(t *testing.T) {
 	}
 }
 
+func TestSetupClaudeCode_ForceSkipsStatusLinePrompt(t *testing.T) {
+	// Setup temp directory
+	tmpDir := t.TempDir()
+	settingsDir := filepath.Join(tmpDir, ".claude")
+	settingsPath := filepath.Join(settingsDir, "settings.json")
+
+	// Create directory
+	if err := os.MkdirAll(settingsDir, 0700); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	// Mock HOME to point to temp dir
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Capture output
+	var outBuf, errBuf bytes.Buffer
+
+	// Create root and add setup command
+	root := &cobra.Command{Use: "costa"}
+	root.AddCommand(setupCmd)
+	root.SetOut(&outBuf)
+	root.SetErr(&errBuf)
+
+	// Run setup with ONLY force flag (no --skip-statusline)
+	// This should skip BOTH the proceed prompt AND the status line prompt
+	root.SetArgs([]string{"setup", "claude-code", "--token", "test-token", "--force"})
+
+	// Reset flags after test
+	defer func() {
+		ccSetupForce = false
+		ccSetupToken = ""
+	}()
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("Command failed: %v", err)
+	}
+
+	output := outBuf.String()
+
+	// Verify no prompts are shown
+	if strings.Contains(output, "Proceed with changes?") {
+		t.Errorf("Expected no proceed prompt with --force, got:\n%s", output)
+	}
+	if strings.Contains(output, "Include status line?") {
+		t.Errorf("Expected no status line prompt with --force, got:\n%s", output)
+	}
+
+	// Verify success message
+	if !strings.Contains(output, "Successfully configured Claude Code for Costa") {
+		t.Errorf("Expected success message in output, got:\n%s", output)
+	}
+
+	// Verify config file was created
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		t.Errorf("Expected config file to be created at: %s", settingsPath)
+	}
+}
+
+func TestSetupClaudeCode_FormatJSON(t *testing.T) {
+	// Setup temp directory
+	tmpDir := t.TempDir()
+	settingsDir := filepath.Join(tmpDir, ".claude")
+	settingsPath := filepath.Join(settingsDir, "settings.json")
+
+	// Create directory
+	if err := os.MkdirAll(settingsDir, 0700); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	// Mock HOME to point to temp dir
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Capture output
+	var outBuf, errBuf bytes.Buffer
+
+	// Create root and add setup command
+	root := &cobra.Command{Use: "costa"}
+	root.AddCommand(setupCmd)
+	root.SetOut(&outBuf)
+	root.SetErr(&errBuf)
+
+	// Run setup with format json flag
+	root.SetArgs([]string{"setup", "claude-code", "--token", "test-token", "--format", "json"})
+
+	// Reset flags after test
+	defer func() {
+		ccSetupToken = ""
+		ccSetupFormat = ""
+	}()
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("Command failed: %v", err)
+	}
+
+	output := outBuf.String()
+
+	// Verify JSON output
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("Expected valid JSON output, got: %s\nError: %v", output, err)
+	}
+
+	// Verify status field
+	if status, ok := result["status"].(string); !ok || status != "success" {
+		t.Errorf("Expected status 'success', got: %v", result["status"])
+	}
+
+	// Verify data field
+	data, ok := result["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected data field to be an object, got: %v", result["data"])
+	}
+
+	// Verify data contains expected fields
+	if message, ok := data["message"].(string); !ok || message == "" {
+		t.Errorf("Expected message in data, got: %v", data["message"])
+	}
+
+	if changed, ok := data["changed"].(bool); !ok || !changed {
+		t.Errorf("Expected changed to be true, got: %v", data["changed"])
+	}
+
+	if configPath, ok := data["config_path"].(string); !ok || configPath != settingsPath {
+		t.Errorf("Expected config_path to be %s, got: %v", settingsPath, data["config_path"])
+	}
+
+	// Verify no human-readable output
+	if strings.Contains(output, "✓") || strings.Contains(output, "📝") {
+		t.Errorf("Expected no human-readable output in JSON mode, got: %s", output)
+	}
+
+	// Verify config file was created
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		t.Errorf("Expected config file to be created at: %s", settingsPath)
+	}
+}
+
+func TestSetupClaudeCode_ForceWithFormatJSON(t *testing.T) {
+	// Setup temp directory
+	tmpDir := t.TempDir()
+	settingsDir := filepath.Join(tmpDir, ".claude")
+
+	// Create directory
+	if err := os.MkdirAll(settingsDir, 0700); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	// Mock HOME to point to temp dir
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Capture output
+	var outBuf, errBuf bytes.Buffer
+
+	// Create root and add setup command
+	root := &cobra.Command{Use: "costa"}
+	root.AddCommand(setupCmd)
+	root.SetOut(&outBuf)
+	root.SetErr(&errBuf)
+
+	// Run setup with both force and format json flags
+	root.SetArgs([]string{"setup", "claude-code", "--token", "test-token", "--force", "--format", "json"})
+
+	// Reset flags after test
+	defer func() {
+		ccSetupToken = ""
+		ccSetupFormat = ""
+		ccSetupForce = false
+	}()
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("Command failed: %v", err)
+	}
+
+	output := outBuf.String()
+
+	// Verify JSON output
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("Expected valid JSON output, got: %s\nError: %v", output, err)
+	}
+
+	// Verify status field
+	if status, ok := result["status"].(string); !ok || status != "success" {
+		t.Errorf("Expected status 'success', got: %v", result["status"])
+	}
+
+	// Verify no prompts in output
+	if strings.Contains(output, "Proceed with changes?") || strings.Contains(output, "Include status line?") {
+		t.Errorf("Expected no prompts with --force and --format json, got: %s", output)
+	}
+}
+
 func TestSetupClaudeCode_AlreadyConfigured(t *testing.T) {
 	// Setup temp directory with fully configured settings
 	tmpDir := t.TempDir()
