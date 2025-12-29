@@ -552,6 +552,7 @@ func getMacSafeStoragePassword() (string, error) {
 	}
 
 	for _, service := range services {
+		// #nosec G204 -- service is selected from a fixed allowlist above.
 		out, err := exec.Command("security", "find-generic-password", "-s", service, "-w").Output()
 		if err != nil {
 			continue
@@ -577,7 +578,7 @@ func pbkdf2SHA1(password, salt []byte, iter, keyLen int) []byte {
 }
 
 func pbkdf2Block(password, salt []byte, iter, block int) []byte {
-	u := make([]byte, 0, sha1.Size)
+	var u []byte
 	mac := hmac.New(sha1.New, password)
 	mac.Write(salt)
 	mac.Write(intToBigEndian(block))
