@@ -1,7 +1,12 @@
 package kilo
 
 import (
+	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/hmac"
+	"crypto/sha1"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -109,7 +114,6 @@ func (k *Kilo) Apply(ctx context.Context, opts integrations.ApplyOpts) (integrat
 
 	if configExists {
 		// Update mode
-		result.UpdatedKeys = append(result.UpdatedKeys, "openAiBaseUrl", "openAiModelId")
 		if existing["openAiBaseUrl"] == baseURL {
 			unchangedKeys = append(unchangedKeys, "openAiBaseUrl")
 		} else {
@@ -120,9 +124,10 @@ func (k *Kilo) Apply(ctx context.Context, opts integrations.ApplyOpts) (integrat
 		} else {
 			updatedKeys = append(updatedKeys, "openAiModelId")
 		}
+		updatedKeys = append(updatedKeys, "openAiApiKey")
 	} else {
 		// Insert mode - all keys are new
-		updatedKeys = append(updatedKeys, "all Kilo configuration keys")
+		updatedKeys = append(updatedKeys, "all Kilo configuration keys", "openAiApiKey")
 	}
 
 	result.UpdatedKeys = updatedKeys
@@ -151,7 +156,9 @@ func (k *Kilo) Apply(ctx context.Context, opts integrations.ApplyOpts) (integrat
 		return result, fmt.Errorf("failed to apply configuration: %w", err)
 	}
 
-	result.Warnings = append(result.Warnings, fmt.Sprintf("When you start VS Code, paste this API key when prompted: %s", token))
+	if err := setKiloAPIKeyInDB(dbPath, token); err != nil {
+		return result, err
+	}
 
 	return result, nil
 }
@@ -456,13 +463,165 @@ func applyKiloConfig(dbPath, baseURL, modelID string, configExists bool, existin
 		}
 	}
 
-	// Clear old API key so user will be prompted
-	_, err = db.Exec("DELETE FROM ItemTable WHERE key LIKE ?", "secret://%openAiApiKey%")
+	return nil
+}
+
+func setKiloAPIKeyInDB(dbPath, apiKey string) error {
+	if apiKey == "" {
+		return fmt.Errorf("missing Costa API key")
+	}
+
+	if runtime.GOOS != "darwin" {
+		return fmt.Errorf("Kilo API key setup is currently only supported on macOS")
+	}
+
+	encrypted, err := encryptWithMacSafeStorage(apiKey)
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]any{
+		"type": "Buffer",
+		"data": bytesToInts(encrypted),
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to encode Kilo API key payload: %w", err)
+	}
+
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+
+	key := `secret://{"extensionId":"kilocode.kilo-code","key":"openAiApiKey"}`
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM ItemTable WHERE key = ?", key).Scan(&count); err != nil {
+		return err
+	}
+
+	if count > 0 {
+		_, err = db.Exec("UPDATE ItemTable SET value = ? WHERE key = ?", string(payloadJSON), key)
+	} else {
+		_, err = db.Exec("INSERT INTO ItemTable (key, value) VALUES (?, ?)", key, string(payloadJSON))
+	}
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func encryptWithMacSafeStorage(plaintext string) ([]byte, error) {
+	password, err := getMacSafeStoragePassword()
+	if err != nil {
+		return nil, err
+	}
+
+	key := pbkdf2SHA1([]byte(password), []byte("saltysalt"), 1003, 16)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	iv := bytes.Repeat([]byte(" "), aes.BlockSize)
+	padded := pkcs7Pad([]byte(plaintext), aes.BlockSize)
+	ciphertext := make([]byte, len(padded))
+
+	mode := cipher.NewCBCEncrypter(block, iv)
+	mode.CryptBlocks(ciphertext, padded)
+
+	prefix := []byte("v10")
+	return append(prefix, ciphertext...), nil
+}
+
+func getMacSafeStoragePassword() (string, error) {
+	services := []string{
+		"Code Safe Storage",
+		"Visual Studio Code Safe Storage",
+		"VS Code Safe Storage",
+		"Microsoft VS Code Safe Storage",
+		"com.microsoft.VSCode Safe Storage",
+		"Electron Safe Storage",
+		"Chrome Safe Storage",
+		"Chromium Safe Storage",
+		"Code - OSS Safe Storage",
+	}
+
+	for _, service := range services {
+		out, err := exec.Command("security", "find-generic-password", "-s", service, "-w").Output()
+		if err != nil {
+			continue
+		}
+		password := strings.TrimSpace(string(out))
+		if password != "" {
+			return password, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find VS Code safe storage key in Keychain (tried common service names)")
+}
+
+func pbkdf2SHA1(password, salt []byte, iter, keyLen int) []byte {
+	hashLen := sha1.Size
+	numBlocks := (keyLen + hashLen - 1) / hashLen
+	var out []byte
+	for block := 1; block <= numBlocks; block++ {
+		u := pbkdf2Block(password, salt, iter, block)
+		out = append(out, u...)
+	}
+	return out[:keyLen]
+}
+
+func pbkdf2Block(password, salt []byte, iter, block int) []byte {
+	u := make([]byte, 0, sha1.Size)
+	mac := hmac.New(sha1.New, password)
+	mac.Write(salt)
+	mac.Write(intToBigEndian(block))
+	u = mac.Sum(nil)
+
+	out := make([]byte, len(u))
+	copy(out, u)
+
+	for i := 1; i < iter; i++ {
+		mac = hmac.New(sha1.New, password)
+		mac.Write(u)
+		u = mac.Sum(nil)
+		for j := range out {
+			out[j] ^= u[j]
+		}
+	}
+
+	return out
+}
+
+func intToBigEndian(i int) []byte {
+	return []byte{
+		byte(i >> 24),
+		byte(i >> 16),
+		byte(i >> 8),
+		byte(i),
+	}
+}
+
+func pkcs7Pad(data []byte, blockSize int) []byte {
+	padLen := blockSize - (len(data) % blockSize)
+	if padLen == 0 {
+		padLen = blockSize
+	}
+	padding := bytes.Repeat([]byte{byte(padLen)}, padLen)
+	return append(data, padding...)
+}
+
+func bytesToInts(data []byte) []int {
+	out := make([]int, len(data))
+	for i, b := range data {
+		out[i] = int(b)
+	}
+	return out
 }
 
 func checkCostaConfig(config map[string]any) (bool, []string) {
