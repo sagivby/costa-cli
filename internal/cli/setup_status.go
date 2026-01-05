@@ -10,6 +10,7 @@ import (
 	"github.com/costa-app/costa-cli/internal/integrations"
 	"github.com/costa-app/costa-cli/internal/integrations/claudecode"
 	"github.com/costa-app/costa-cli/internal/integrations/codex"
+	"github.com/costa-app/costa-cli/internal/integrations/kilo"
 )
 
 var (
@@ -42,96 +43,150 @@ func runSetupStatus(cmd *cobra.Command, args []string) error {
 
 	// If specific app requested
 	if len(args) > 0 {
-		appName := args[0]
-		// Normalize aliases
-		if appName == "claude" || appName == "claude code" {
-			appName = "claude-code"
-		}
-
-		if appName == "claude-code" {
-			return showClaudeCodeStatus(cmd, ctx, scope)
-		}
-		if appName == "codex" {
-			return showCodexStatus(cmd, ctx, scope)
-		}
-
-		return fmt.Errorf("unknown app: %s", appName)
+		return showSpecificAppStatus(cmd, ctx, scope, args[0])
 	}
 
-	// Check Claude Code
+	// Check all apps
 	claudeStatus, err := claudecode.New().Status(ctx, scope)
 	if err != nil && setupStatusFormat != "json" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Error checking Claude Code: %v\n", err)
 	}
 
-	// Check Codex
 	codexStatus, codexErr := codex.New().Status(ctx, scope)
 	if codexErr != nil && setupStatusFormat != "json" {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Error checking Codex: %v\n", codexErr)
 	}
 
-	// JSON output
-	if setupStatusFormat == "json" {
-		output := map[string]interface{}{
-			"claude_code": map[string]interface{}{
-				"installed":        claudeStatus.Installed,
-				"version":          claudeStatus.Version,
-				"config_exists":    claudeStatus.ConfigExists,
-				"is_costa_enabled": claudeStatus.IsCosta,
-			},
-			"codex": map[string]interface{}{
-				"config_exists":    codexStatus.ConfigExists,
-				"is_costa_enabled": codexStatus.IsCosta,
-			},
-		}
-		if err != nil {
-			output["error"] = err.Error()
-		}
-		data, jsonErr := json.Marshal(output)
-		if jsonErr != nil {
-			return jsonErr
-		}
-		fmt.Fprintln(cmd.OutOrStdout(), string(data))
-		return nil
+	kiloStatus, kiloErr := kilo.New().Status(ctx, scope)
+	if kiloErr != nil && setupStatusFormat != "json" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Error checking Kilo: %v\n", kiloErr)
 	}
 
-	// Human-readable output
+	// Output results
+	if setupStatusFormat == "json" {
+		return outputAllStatusJSON(cmd, claudeStatus, err, codexStatus, kiloStatus, kiloErr)
+	}
+
+	return outputAllStatusHuman(cmd, claudeStatus, err, codexStatus, codexErr, kiloStatus, kiloErr)
+}
+
+func showSpecificAppStatus(cmd *cobra.Command, ctx context.Context, scope integrations.Scope, appName string) error {
+	// Normalize aliases
+	if appName == "claude" || appName == "claude code" {
+		appName = "claude-code"
+	}
+
+	switch appName {
+	case "claude-code":
+		return showClaudeCodeStatus(cmd, ctx, scope)
+	case "codex":
+		return showCodexStatus(cmd, ctx, scope)
+	case "kilo", "kilo-code":
+		return showKiloStatus(cmd, ctx, scope)
+	default:
+		return fmt.Errorf("unknown app: %s", appName)
+	}
+}
+
+func outputAllStatusJSON(cmd *cobra.Command, claudeStatus integrations.StatusResult, claudeErr error, codexStatus integrations.StatusResult, kiloStatus integrations.StatusResult, kiloErr error) error {
+	output := map[string]interface{}{
+		"claude_code": map[string]interface{}{
+			"installed":        claudeStatus.Installed,
+			"version":          claudeStatus.Version,
+			"config_exists":    claudeStatus.ConfigExists,
+			"is_costa_enabled": claudeStatus.IsCosta,
+		},
+		"codex": map[string]interface{}{
+			"config_exists":    codexStatus.ConfigExists,
+			"is_costa_enabled": codexStatus.IsCosta,
+		},
+		"kilo": map[string]interface{}{
+			"installed":        kiloStatus.Installed,
+			"version":          kiloStatus.Version,
+			"config_exists":    kiloStatus.ConfigExists,
+			"is_costa_enabled": kiloStatus.IsCosta,
+		},
+	}
+	if claudeErr != nil {
+		output["claude_error"] = claudeErr.Error()
+	}
+	if kiloErr != nil {
+		output["kilo_error"] = kiloErr.Error()
+	}
+	data, jsonErr := json.Marshal(output)
+	if jsonErr != nil {
+		return jsonErr
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), string(data))
+	return nil
+}
+
+func outputAllStatusHuman(cmd *cobra.Command, claudeStatus integrations.StatusResult, claudeErr error, codexStatus integrations.StatusResult, codexErr error, kiloStatus integrations.StatusResult, kiloErr error) error {
 	fmt.Fprintln(cmd.OutOrStdout(), "🔍 Costa Setup Status")
 
-	if err == nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "Claude Code:    %s\n", formatStatusIcon(claudeStatus.IsCosta))
-		if claudeStatus.Installed {
-			fmt.Fprintf(cmd.OutOrStdout(), "  Installed:    ✓ %s\n", claudeStatus.Version)
-		} else {
-			fmt.Fprintln(cmd.OutOrStdout(), "  Installed:    ✗ Not found")
-		}
-		if claudeStatus.ConfigExists {
-			if claudeStatus.IsCosta {
-				fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✓ Costa enabled")
-			} else {
-				fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ⚠ Partial setup")
-			}
-		} else {
-			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✗ Not configured")
-		}
+	if claudeErr == nil {
+		printClaudeCodeStatusSummary(cmd, claudeStatus)
 	}
 
 	if codexErr == nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "Codex:          %s\n", formatStatusIcon(codexStatus.IsCosta))
-		if codexStatus.ConfigExists {
-			if codexStatus.IsCosta {
-				fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✓ Costa enabled")
-			} else {
-				fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ⚠ Partial setup")
-			}
-		} else {
-			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✗ Not configured")
-		}
+		printCodexStatusSummary(cmd, codexStatus)
+	}
+
+	if kiloErr == nil {
+		printKiloStatusSummary(cmd, kiloStatus)
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "\nRun 'costa setup status <app>' for details.\n")
-
 	return nil
+}
+
+func printClaudeCodeStatusSummary(cmd *cobra.Command, status integrations.StatusResult) {
+	fmt.Fprintf(cmd.OutOrStdout(), "Claude Code:    %s\n", formatStatusIcon(status.IsCosta))
+	if status.Installed {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Installed:    ✓ %s\n", status.Version)
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "  Installed:    ✗ Not found")
+	}
+	if status.ConfigExists {
+		if status.IsCosta {
+			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✓ Costa enabled")
+		} else {
+			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ⚠ Partial setup")
+		}
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✗ Not configured")
+	}
+}
+
+func printCodexStatusSummary(cmd *cobra.Command, status integrations.StatusResult) {
+	fmt.Fprintf(cmd.OutOrStdout(), "Codex:          %s\n", formatStatusIcon(status.IsCosta))
+	if status.ConfigExists {
+		if status.IsCosta {
+			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✓ Costa enabled")
+		} else {
+			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ⚠ Partial setup")
+		}
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✗ Not configured")
+	}
+}
+
+func printKiloStatusSummary(cmd *cobra.Command, status integrations.StatusResult) {
+	fmt.Fprintf(cmd.OutOrStdout(), "Kilo:           %s\n", formatStatusIcon(status.IsCosta))
+	if status.Installed {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Installed:    ✓ %s\n", status.Version)
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "  Installed:    ✗ Not found")
+	}
+	if status.ConfigExists {
+		if status.IsCosta {
+			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✓ Costa enabled")
+		} else {
+			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ⚠ Partial setup")
+		}
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✗ Not configured")
+	}
 }
 
 func showClaudeCodeStatus(cmd *cobra.Command, ctx context.Context, scope integrations.Scope) error {
@@ -265,6 +320,77 @@ func showCodexStatus(cmd *cobra.Command, ctx context.Context, scope integrations
 	} else {
 		fmt.Fprintln(cmd.OutOrStdout(), "Config status:  ⚠ Partially configured")
 		fmt.Fprintln(cmd.OutOrStdout(), "\nRun 'costa setup codex' to fix.")
+	}
+
+	return nil
+}
+
+func showKiloStatus(cmd *cobra.Command, ctx context.Context, scope integrations.Scope) error {
+	integration := kilo.New()
+	status, err := integration.Status(ctx, scope)
+	if err != nil {
+		return fmt.Errorf("failed to check status: %w", err)
+	}
+
+	// JSON output
+	if setupStatusFormat == "json" {
+		output := map[string]interface{}{
+			"installed":        status.Installed,
+			"version":          status.Version,
+			"config_path":      status.ConfigPath,
+			"config_exists":    status.ConfigExists,
+			"is_costa_enabled": status.IsCosta,
+		}
+		if status.Model != "" {
+			output["model"] = status.Model
+		}
+		if len(status.Missing) > 0 {
+			output["missing"] = status.Missing
+		}
+		data, jsonErr := json.Marshal(output)
+		if jsonErr != nil {
+			return jsonErr
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), string(data))
+		return nil
+	}
+
+	// Human-readable output
+	fmt.Fprintln(cmd.OutOrStdout(), "🔍 Kilo Setup Status")
+
+	// VS Code
+	if status.Installed {
+		fmt.Fprintf(cmd.OutOrStdout(), "VS Code:        ✓ Installed (%s)\n", status.Version)
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "VS Code:        ✗ Not found")
+	}
+
+	// Database path
+	fmt.Fprintf(cmd.OutOrStdout(), "Database path:  %s\n", status.ConfigPath)
+
+	// Config status
+	if !status.ConfigExists {
+		fmt.Fprintln(cmd.OutOrStdout(), "Config status:  ✗ Not configured")
+		fmt.Fprintln(cmd.OutOrStdout(), "Run 'costa setup kilo' to configure.")
+		return nil
+	}
+
+	if status.IsCosta {
+		fmt.Fprintln(cmd.OutOrStdout(), "Config status:  ✓ Configured for Costa")
+
+		// Show current model
+		if status.Model != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "Model:          %s\n", status.Model)
+		}
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "Config status:  ⚠ Partially configured")
+		if len(status.Missing) > 0 {
+			fmt.Fprintln(cmd.OutOrStdout(), "\nMissing Costa settings:")
+			for _, key := range status.Missing {
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", key)
+			}
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "\nRun 'costa setup kilo' to fix.")
 	}
 
 	return nil

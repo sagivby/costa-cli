@@ -15,7 +15,8 @@ type ApplyOpts struct {
 	Scope            Scope
 	TokenOverride    string
 	BackupDir        string
-	Force            bool // Skip confirmation prompt (auto-yes)
+	IDE              string // IDE to configure (vscode, cursor, jetbrains) - for Kilo
+	Force            bool   // Skip confirmation prompt (auto-yes)
 	RefreshTokenOnly bool
 	DryRun           bool
 	RequireInstalled bool
