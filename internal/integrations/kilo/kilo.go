@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	// Import sqlite3 driver for database/sql
-	_ "github.com/mattn/go-sqlite3"
+	// Import sqlite3 driver for database/sql (pure-Go version that works without CGO)
+	_ "modernc.org/sqlite"
 
 	"github.com/costa-app/costa-cli/internal/auth"
 	"github.com/costa-app/costa-cli/internal/debug"
@@ -340,7 +340,7 @@ func getIDEDBPath(ide string) (string, error) {
 }
 
 func loadKiloConfig(dbPath string) (map[string]any, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -367,7 +367,7 @@ func loadKiloConfig(dbPath string) (map[string]any, error) {
 }
 
 func applyKiloConfig(dbPath, baseURL, modelID string, configExists bool, existing map[string]any) error {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
 	}
@@ -489,7 +489,7 @@ func setKiloAPIKeyInDB(dbPath, apiKey string) error {
 		return fmt.Errorf("failed to encode Kilo API key payload: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
 	}

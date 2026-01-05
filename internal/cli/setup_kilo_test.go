@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
+	_ "modernc.org/sqlite"
 )
 
 func TestSetupKilo_DryRun(t *testing.T) {
@@ -766,7 +766,7 @@ func setupMockVSCodeDB(t *testing.T, tmpDir string, existingConfig map[string]an
 	}
 
 	// Create database
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
@@ -798,7 +798,7 @@ func setupMockVSCodeDB(t *testing.T, tmpDir string, existingConfig map[string]an
 func loadKiloConfigFromDB(t *testing.T, dbPath string) map[string]any {
 	t.Helper()
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}
@@ -824,7 +824,7 @@ func loadKiloConfigFromDB(t *testing.T, dbPath string) map[string]any {
 func loadSecretBufferFromDB(t *testing.T, dbPath, extensionID, key string) []byte {
 	t.Helper()
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}
