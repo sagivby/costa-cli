@@ -586,7 +586,8 @@ func TestSetupKilo_JSONFormat(t *testing.T) {
 		t.Fatalf("Expected data object, got: %v", result["data"])
 	}
 
-	if statusVal == "success" {
+	switch statusVal {
+	case "success":
 		// Verify data fields on success
 		if message, ok := data["message"].(string); !ok || message != "Successfully configured" {
 			t.Errorf("Expected message 'Successfully configured', got: %v", data["message"])
@@ -610,12 +611,12 @@ func TestSetupKilo_JSONFormat(t *testing.T) {
 		if config == nil {
 			t.Fatal("Expected config to be created")
 		}
-	} else if statusVal == "error" {
+	case "error":
 		// Acceptable in environments without VS Code installed
 		if _, ok := data["error"].(string); !ok {
 			t.Errorf("Expected error message in data on error status, got: %v", data["error"])
 		}
-	} else {
+	default:
 		t.Errorf("Unexpected status value: %v", statusVal)
 	}
 }
