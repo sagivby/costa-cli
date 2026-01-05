@@ -121,6 +121,10 @@ func runSetupKilo(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Inform user about keychain access
+	fmt.Fprintln(cmd.OutOrStdout(), "\nSetting up secure storage for your API key...")
+	fmt.Fprintln(cmd.OutOrStdout(), "macOS will ask for Keychain access so Costa can safely encrypt and store your credentials.")
+
 	// Phase 2: write (actual apply)
 	writeOpts := opts
 	writeOpts.DryRun = false
