@@ -539,6 +539,11 @@ func encryptWithMacSafeStorage(plaintext string) ([]byte, error) {
 }
 
 func getMacSafeStoragePassword() (string, error) {
+	// Allow tests/CI to override via environment variable
+	if v := os.Getenv("COSTA_SAFE_STORAGE_PASSWORD"); v != "" {
+		return v, nil
+	}
+
 	services := []string{
 		"Code Safe Storage",
 		"Visual Studio Code Safe Storage",

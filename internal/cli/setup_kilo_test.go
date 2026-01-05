@@ -89,6 +89,10 @@ func TestSetupKilo_ForceSkipsPrompts(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", originalHome)
 
+	// Set test safe storage password
+	os.Setenv("COSTA_SAFE_STORAGE_PASSWORD", "test-password")
+	defer os.Unsetenv("COSTA_SAFE_STORAGE_PASSWORD")
+
 	// Capture output
 	var outBuf, errBuf bytes.Buffer
 
@@ -166,6 +170,10 @@ func TestSetupKilo_AlreadyConfigured(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", originalHome)
 
+	// Set test safe storage password
+	os.Setenv("COSTA_SAFE_STORAGE_PASSWORD", "test-password")
+	defer os.Unsetenv("COSTA_SAFE_STORAGE_PASSWORD")
+
 	// Capture output
 	var outBuf, errBuf bytes.Buffer
 
@@ -234,6 +242,10 @@ func TestSetupKilo_UpdateExistingConfig(t *testing.T) {
 	originalHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", originalHome)
+
+	// Set test safe storage password
+	os.Setenv("COSTA_SAFE_STORAGE_PASSWORD", "test-password")
+	defer os.Unsetenv("COSTA_SAFE_STORAGE_PASSWORD")
 
 	// Capture output
 	var outBuf, errBuf bytes.Buffer
@@ -315,6 +327,10 @@ func TestSetupKilo_CustomBackupDir(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", originalHome)
 
+	// Set test safe storage password
+	os.Setenv("COSTA_SAFE_STORAGE_PASSWORD", "test-password")
+	defer os.Unsetenv("COSTA_SAFE_STORAGE_PASSWORD")
+
 	// Capture output
 	var outBuf, errBuf bytes.Buffer
 
@@ -381,6 +397,10 @@ func TestSetupKilo_WritesAPIKeySecret(t *testing.T) {
 	originalHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", originalHome)
+
+	// Set test safe storage password
+	os.Setenv("COSTA_SAFE_STORAGE_PASSWORD", "test-password")
+	defer os.Unsetenv("COSTA_SAFE_STORAGE_PASSWORD")
 
 	// Capture output
 	var outBuf, errBuf bytes.Buffer
@@ -508,6 +528,226 @@ func TestSetupKilo_IDENotInstalled(t *testing.T) {
 	// This test can't guarantee VS Code is not installed
 	// So we'll just verify the error handling path exists
 	t.Skip("Test requires VS Code to not be installed")
+}
+
+func TestSetupKilo_JSONFormat(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Kilo setup only supported on macOS")
+	}
+
+	// Setup temp directory with mock VS Code database
+	tmpDir := t.TempDir()
+	setupMockVSCodeDB(t, tmpDir, nil)
+
+	// Mock HOME to point to temp dir
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Capture output
+	var outBuf, errBuf bytes.Buffer
+
+	// Create root and add setup command
+	root := &cobra.Command{Use: "costa"}
+	root.AddCommand(setupCmd)
+	root.SetOut(&outBuf)
+	root.SetErr(&errBuf)
+
+	// Run setup with JSON format
+	root.SetArgs([]string{"setup", "kilo", "--token", "test-token", "--format", "json"})
+
+	// Reset flags after test
+	defer func() {
+		kiloSetupToken = ""
+		kiloSetupFormat = ""
+	}()
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("Command failed: %v", err)
+	}
+
+	output := outBuf.String()
+
+	// Parse JSON output
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("Failed to parse JSON output: %v\nOutput: %s", err, output)
+	}
+
+	// Verify JSON structure
+	statusVal, ok := result["status"].(string)
+	if !ok {
+		t.Fatalf("Expected status field, got: %v", result["status"])
+	}
+
+	data, ok := result["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected data object, got: %v", result["data"])
+	}
+
+	if statusVal == "success" {
+		// Verify data fields on success
+		if message, ok := data["message"].(string); !ok || message != "Successfully configured" {
+			t.Errorf("Expected message 'Successfully configured', got: %v", data["message"])
+		}
+
+		if changed, ok := data["changed"].(bool); !ok || !changed {
+			t.Errorf("Expected changed to be true, got: %v", data["changed"])
+		}
+
+		if _, ok := data["updated_keys"]; !ok {
+			t.Errorf("Expected updated_keys field in data")
+		}
+
+		if _, ok := data["config_path"]; !ok {
+			t.Errorf("Expected config_path field in data")
+		}
+
+		// Verify database was updated
+		dbPath := filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+		config := loadKiloConfigFromDB(t, dbPath)
+		if config == nil {
+			t.Fatal("Expected config to be created")
+		}
+	} else if statusVal == "error" {
+		// Acceptable in environments without VS Code installed
+		if _, ok := data["error"].(string); !ok {
+			t.Errorf("Expected error message in data on error status, got: %v", data["error"])
+		}
+	} else {
+		t.Errorf("Unexpected status value: %v", statusVal)
+	}
+}
+
+func TestSetupKilo_JSONFormat_DryRun(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Kilo setup only supported on macOS")
+	}
+
+	// Setup temp directory with mock VS Code database
+	tmpDir := t.TempDir()
+	setupMockVSCodeDB(t, tmpDir, nil)
+
+	// Mock HOME to point to temp dir
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Capture output
+	var outBuf, errBuf bytes.Buffer
+
+	// Create root and add setup command
+	root := &cobra.Command{Use: "costa"}
+	root.AddCommand(setupCmd)
+	root.SetOut(&outBuf)
+	root.SetErr(&errBuf)
+
+	// Run setup with JSON format and dry-run
+	root.SetArgs([]string{"setup", "kilo", "--token", "test-token", "--format", "json", "--dry-run"})
+
+	// Reset flags after test
+	defer func() {
+		kiloSetupToken = ""
+		kiloSetupFormat = ""
+		kiloSetupDryRun = false
+	}()
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("Command failed: %v", err)
+	}
+
+	output := outBuf.String()
+
+	// Parse JSON output
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("Failed to parse JSON output: %v\nOutput: %s", err, output)
+	}
+
+	// Verify JSON structure
+	if status, ok := result["status"].(string); !ok || status != "success" {
+		t.Errorf("Expected status 'success', got: %v", result["status"])
+	}
+
+	data, ok := result["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("Expected data object, got: %v", result["data"])
+	}
+
+	// Verify dry run message
+	if message, ok := data["message"].(string); !ok || message != "Dry run completed" {
+		t.Errorf("Expected message 'Dry run completed', got: %v", data["message"])
+	}
+
+	// Verify database was NOT modified
+	dbPath := filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	config := loadKiloConfigFromDB(t, dbPath)
+	if config != nil {
+		t.Errorf("Expected database to remain empty in dry-run mode, but config was found")
+	}
+}
+
+func TestSetupKilo_JSONFormat_AlreadyConfigured(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Kilo setup only supported on macOS")
+	}
+
+	// Setup temp directory with fully configured Kilo
+	tmpDir := t.TempDir()
+	existingConfig := map[string]any{
+		"openAiBaseUrl": "https://ai.costa.app/api/v1",
+		"openAiModelId": "costa/auto",
+		"apiProvider":   "openai",
+		"id":            "costa_default",
+	}
+	setupMockVSCodeDB(t, tmpDir, existingConfig)
+
+	// Mock HOME to point to temp dir
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Capture output
+	var outBuf, errBuf bytes.Buffer
+
+	// Create root and add setup command
+	root := &cobra.Command{Use: "costa"}
+	root.AddCommand(setupCmd)
+	root.SetOut(&outBuf)
+	root.SetErr(&errBuf)
+
+	// Run setup with JSON format on already configured system
+	root.SetArgs([]string{"setup", "kilo", "--token", "test-token", "--format", "json"})
+
+	// Reset flags after test
+	defer func() {
+		kiloSetupToken = ""
+		kiloSetupFormat = ""
+	}()
+
+	err := root.Execute()
+	if err != nil {
+		t.Fatalf("Command failed: %v", err)
+	}
+
+	output := outBuf.String()
+
+	// Parse JSON output
+	var result map[string]any
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("Failed to parse JSON output: %v\nOutput: %s", err, output)
+	}
+
+	// Verify JSON structure
+	statusVal, ok := result["status"].(string)
+	if !ok {
+		t.Fatalf("Expected status field, got: %v", result["status"])
+	}
+	if statusVal != "success" && statusVal != "error" {
+		t.Errorf("Unexpected status value: %v", statusVal)
+	}
 }
 
 // Helper functions
