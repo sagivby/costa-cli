@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       is-prerelease: ${{ steps.check.outputs.is-prerelease }}
+      selected-tag: ${{ steps.check.outputs.selected-tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,15 +38,36 @@ jobs:
       - name: Check branch and version
         id: check
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          echo "Tag: $TAG"
+          TRIGGERED_TAG="${GITHUB_REF#refs/tags/}"
+          echo "Triggered by tag: $TRIGGERED_TAG"
 
-          # Check if this is a prerelease (contains a hyphen after the version)
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-.*$ ]]; then
-            echo "is-prerelease=true" >> $GITHUB_OUTPUT
-            echo "Prerelease detected - can be released from any branch"
-          else
+          # Get all tags pointing to the current commit
+          ALL_TAGS=$(git tag --points-at HEAD)
+          echo "All tags on this commit:"
+          echo "$ALL_TAGS"
+
+          # Filter for valid SemVer tags (v*.*.*)
+          SEMVER_TAGS=$(echo "$ALL_TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' || true)
+          
+          if [[ -z "$SEMVER_TAGS" ]]; then
+            echo "Error: No valid SemVer tags found on this commit"
+            exit 1
+          fi
+
+          # Select the highest-precedence tag:
+          # 1. Release tags (no prerelease suffix) have higher precedence than prerelease tags
+          # 2. Among release tags, select the highest version
+          # 3. Among prerelease tags, select the highest version
+          
+          RELEASE_TAGS=$(echo "$SEMVER_TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          PRERELEASE_TAGS=$(echo "$SEMVER_TAGS" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-' || true)
+
+          if [[ -n "$RELEASE_TAGS" ]]; then
+            # Release tags exist - select the highest one
+            SELECTED_TAG=$(echo "$RELEASE_TAGS" | sort -V | tail -n1)
             echo "is-prerelease=false" >> $GITHUB_OUTPUT
+            echo "Selected release tag: $SELECTED_TAG"
+            
             # Full release - must be on main
             BRANCH=$(git branch -r --contains $GITHUB_SHA | grep -E 'origin/main$' || true)
             if [[ -z "$BRANCH" ]]; then
@@ -53,6 +75,20 @@ jobs:
               exit 1
             fi
             echo "Full release on main branch - proceeding"
+          else
+            # Only prerelease tags exist - select the highest one
+            SELECTED_TAG=$(echo "$PRERELEASE_TAGS" | sort -V | tail -n1)
+            echo "is-prerelease=true" >> $GITHUB_OUTPUT
+            echo "Selected prerelease tag: $SELECTED_TAG"
+            echo "Prerelease detected - can be released from any branch"
+          fi
+
+          echo "selected-tag=$SELECTED_TAG" >> $GITHUB_OUTPUT
+          
+          # Warn if the triggered tag differs from the selected tag
+          if [[ "$TRIGGERED_TAG" != "$SELECTED_TAG" ]]; then
+            echo "⚠️  WARNING: Workflow triggered by $TRIGGERED_TAG, but selected $SELECTED_TAG (highest precedence)"
+            echo "⚠️  This can happen when multiple tags point to the same commit"
           fi
 
   release:
@@ -64,6 +100,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Checkout selected tag
+        run: |
+          SELECTED_TAG="${{ needs.check-branch.outputs.selected-tag }}"
+          echo "Checking out selected tag: $SELECTED_TAG"
+          git checkout "$SELECTED_TAG"
 
       - name: Setup Go
         uses: actions/setup-go@v5
