@@ -1,11 +1,14 @@
-# costa-cli
+# costa cli [![Release](https://img.shields.io/github/v/release/costa-app/costa-cli?color=4f46e5&logo=github&logoColor=white)](https://github.com/costa-app/costa-cli/releases/latest) [![Pre-release](https://img.shields.io/github/v/release/costa-app/costa-cli?include_prereleases&label=pre-release&color=818cf8&logo=github&logoColor=white)](https://github.com/costa-app/costa-cli/releases)
 
-Command-line tool for managing Costa authentication and IDE integrations.
+Command-line tool for managing [Costa](https://costa.app) and integrating it with IDEs.
+
 
 [![Go Version](https://img.shields.io/badge/go-1.25-blue)](https://go.dev/)
 [![Lint](https://github.com/costa-app/costa-cli/workflows/lint/badge.svg)](https://github.com/costa-app/costa-cli/actions)
 [![Test](https://github.com/costa-app/costa-cli/workflows/test/badge.svg)](https://github.com/costa-app/costa-cli/actions)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+
+Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=costa.costa-code)
 
 ## Overview
 
