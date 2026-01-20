@@ -14,5 +14,6 @@ func init() {
 	setupCmd.AddCommand(setupClaudeCodeCmd)
 	setupCmd.AddCommand(setupCodexCmd)
 	setupCmd.AddCommand(setupKiloCmd)
+	setupCmd.AddCommand(setupOpenCodeCmd)
 	setupCmd.AddCommand(setupStatusCmd)
 }

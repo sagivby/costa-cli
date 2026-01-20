@@ -11,6 +11,7 @@ import (
 	"github.com/costa-app/costa-cli/internal/integrations/claudecode"
 	"github.com/costa-app/costa-cli/internal/integrations/codex"
 	"github.com/costa-app/costa-cli/internal/integrations/kilo"
+	"github.com/costa-app/costa-cli/internal/integrations/opencode"
 )
 
 var (
@@ -62,18 +63,26 @@ func runSetupStatus(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.ErrOrStderr(), "Error checking Kilo: %v\n", kiloErr)
 	}
 
-	// Output results
-	if setupStatusFormat == "json" {
-		return outputAllStatusJSON(cmd, claudeStatus, err, codexStatus, kiloStatus, kiloErr)
+	opencodeStatus, opencodeErr := opencode.New().Status(ctx, scope)
+	if opencodeErr != nil && setupStatusFormat != "json" {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Error checking OpenCode: %v\n", opencodeErr)
 	}
 
-	return outputAllStatusHuman(cmd, claudeStatus, err, codexStatus, codexErr, kiloStatus, kiloErr)
+	// Output results
+	if setupStatusFormat == "json" {
+		return outputAllStatusJSON(cmd, claudeStatus, err, codexStatus, kiloStatus, kiloErr, opencodeStatus, opencodeErr)
+	}
+
+	return outputAllStatusHuman(cmd, claudeStatus, err, codexStatus, codexErr, kiloStatus, kiloErr, opencodeStatus, opencodeErr)
 }
 
 func showSpecificAppStatus(cmd *cobra.Command, ctx context.Context, scope integrations.Scope, appName string) error {
 	// Normalize aliases
 	if appName == "claude" || appName == "claude code" {
 		appName = "claude-code"
+	}
+	if appName == "open-code" {
+		appName = "opencode"
 	}
 
 	switch appName {
@@ -83,12 +92,14 @@ func showSpecificAppStatus(cmd *cobra.Command, ctx context.Context, scope integr
 		return showCodexStatus(cmd, ctx, scope)
 	case "kilo", "kilo-code":
 		return showKiloStatus(cmd, ctx, scope)
+	case "opencode":
+		return showOpenCodeStatus(cmd, ctx, scope)
 	default:
 		return fmt.Errorf("unknown app: %s", appName)
 	}
 }
 
-func outputAllStatusJSON(cmd *cobra.Command, claudeStatus integrations.StatusResult, claudeErr error, codexStatus integrations.StatusResult, kiloStatus integrations.StatusResult, kiloErr error) error {
+func outputAllStatusJSON(cmd *cobra.Command, claudeStatus integrations.StatusResult, claudeErr error, codexStatus integrations.StatusResult, kiloStatus integrations.StatusResult, kiloErr error, opencodeStatus integrations.StatusResult, opencodeErr error) error {
 	output := map[string]interface{}{
 		"claude_code": map[string]interface{}{
 			"installed":        claudeStatus.Installed,
@@ -106,12 +117,21 @@ func outputAllStatusJSON(cmd *cobra.Command, claudeStatus integrations.StatusRes
 			"config_exists":    kiloStatus.ConfigExists,
 			"is_costa_enabled": kiloStatus.IsCosta,
 		},
+		"opencode": map[string]interface{}{
+			"installed":        opencodeStatus.Installed,
+			"version":          opencodeStatus.Version,
+			"config_exists":    opencodeStatus.ConfigExists,
+			"is_costa_enabled": opencodeStatus.IsCosta,
+		},
 	}
 	if claudeErr != nil {
 		output["claude_error"] = claudeErr.Error()
 	}
 	if kiloErr != nil {
 		output["kilo_error"] = kiloErr.Error()
+	}
+	if opencodeErr != nil {
+		output["opencode_error"] = opencodeErr.Error()
 	}
 	data, jsonErr := json.Marshal(output)
 	if jsonErr != nil {
@@ -121,7 +141,7 @@ func outputAllStatusJSON(cmd *cobra.Command, claudeStatus integrations.StatusRes
 	return nil
 }
 
-func outputAllStatusHuman(cmd *cobra.Command, claudeStatus integrations.StatusResult, claudeErr error, codexStatus integrations.StatusResult, codexErr error, kiloStatus integrations.StatusResult, kiloErr error) error {
+func outputAllStatusHuman(cmd *cobra.Command, claudeStatus integrations.StatusResult, claudeErr error, codexStatus integrations.StatusResult, codexErr error, kiloStatus integrations.StatusResult, kiloErr error, opencodeStatus integrations.StatusResult, opencodeErr error) error {
 	fmt.Fprintln(cmd.OutOrStdout(), "🔍 Costa Setup Status")
 
 	if claudeErr == nil {
@@ -134,6 +154,10 @@ func outputAllStatusHuman(cmd *cobra.Command, claudeStatus integrations.StatusRe
 
 	if kiloErr == nil {
 		printKiloStatusSummary(cmd, kiloStatus)
+	}
+
+	if opencodeErr == nil {
+		printOpenCodeStatusSummary(cmd, opencodeStatus)
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "\nRun 'costa setup status <app>' for details.\n")
@@ -391,6 +415,105 @@ func showKiloStatus(cmd *cobra.Command, ctx context.Context, scope integrations.
 			}
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), "\nRun 'costa setup kilo' to fix.")
+	}
+
+	return nil
+}
+
+func printOpenCodeStatusSummary(cmd *cobra.Command, status integrations.StatusResult) {
+	fmt.Fprintf(cmd.OutOrStdout(), "OpenCode:       %s\n", formatStatusIcon(status.IsCosta))
+	if status.Installed {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Installed:    ✓ %s\n", status.Version)
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "  Installed:    ✗ Not found")
+	}
+	if status.ConfigExists {
+		if status.IsCosta {
+			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✓ Costa enabled")
+		} else {
+			fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ⚠ Partial setup")
+		}
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "  Configured:   ✗ Not configured")
+	}
+}
+
+func showOpenCodeStatus(cmd *cobra.Command, ctx context.Context, scope integrations.Scope) error {
+	integration := opencode.New()
+	status, err := integration.Status(ctx, scope)
+	if err != nil {
+		return fmt.Errorf("failed to check status: %w", err)
+	}
+
+	// JSON output
+	if setupStatusFormat == "json" {
+		output := map[string]interface{}{
+			"installed":        status.Installed,
+			"version":          status.Version,
+			"scope":            string(status.Scope),
+			"config_path":      status.ConfigPath,
+			"config_exists":    status.ConfigExists,
+			"is_costa_enabled": status.IsCosta,
+		}
+		if status.Model != "" {
+			output["model"] = status.Model
+		}
+		if status.TokenRedacted != "" {
+			output["token_redacted"] = status.TokenRedacted
+		}
+		if len(status.Missing) > 0 {
+			output["missing"] = status.Missing
+		}
+		data, jsonErr := json.Marshal(output)
+		if jsonErr != nil {
+			return jsonErr
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), string(data))
+		return nil
+	}
+
+	// Human-readable output
+	fmt.Fprintln(cmd.OutOrStdout(), "🔍 OpenCode Setup Status")
+
+	// OpenCode CLI
+	if status.Installed {
+		fmt.Fprintf(cmd.OutOrStdout(), "OpenCode CLI:   ✓ Installed (%s)\n", status.Version)
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "OpenCode CLI:   ✗ Not found")
+	}
+
+	// Config info
+	fmt.Fprintf(cmd.OutOrStdout(), "Config scope:   %s\n", status.Scope)
+	fmt.Fprintf(cmd.OutOrStdout(), "Config path:    %s\n", status.ConfigPath)
+
+	// Config status
+	if !status.ConfigExists {
+		fmt.Fprintln(cmd.OutOrStdout(), "Config status:  ✗ Not configured")
+		fmt.Fprintln(cmd.OutOrStdout(), "Run 'costa setup opencode' to configure.")
+		return nil
+	}
+
+	if status.IsCosta {
+		fmt.Fprintln(cmd.OutOrStdout(), "Config status:  ✓ Configured for Costa")
+
+		// Show current model
+		if status.Model != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "Model:          %s\n", status.Model)
+		}
+
+		// Check token presence (redacted)
+		if status.TokenRedacted != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "Token:          %s\n", status.TokenRedacted)
+		}
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "Config status:  ⚠ Partially configured")
+		if len(status.Missing) > 0 {
+			fmt.Fprintln(cmd.OutOrStdout(), "\nMissing Costa settings:")
+			for _, key := range status.Missing {
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", key)
+			}
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "\nRun 'costa setup opencode' to fix.")
 	}
 
 	return nil
