@@ -546,3 +546,85 @@ func GetCodingToken(ctx context.Context) (*TokenData, error) {
 
 	return token.Coding, nil
 }
+
+// Model represents a model from the Costa API
+type Model struct {
+	ID      string `json:"id"`
+	Name    string `json:"name,omitempty"`
+	Object  string `json:"object,omitempty"`
+	OwnedBy string `json:"owned_by,omitempty"`
+}
+
+// ModelsResponse represents the response from the models API endpoint
+type ModelsResponse struct {
+	Object string  `json:"object"`
+	Data   []Model `json:"data"`
+}
+
+// GetModels fetches the list of available models from Costa API
+// Note: This function does NOT lock tokenMutex to avoid deadlocks when called
+// from contexts that already hold the lock (e.g., during setup flows)
+func GetModels(ctx context.Context) ([]Model, error) {
+	// Load current token state without locking (read-only operation)
+	token, err := LoadToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load token: %w", err)
+	}
+
+	// Use OAuth token if available
+	if token.OAuth == nil || !token.OAuth.IsValid() {
+		return nil, fmt.Errorf("no valid OAuth token found - please login first")
+	}
+
+	oauthToken := token.OAuth
+
+	debug.Printf("Fetching models from %s\n", GetModelsURL())
+
+	// Fetch models
+	req, err := http.NewRequestWithContext(ctx, "GET", GetModelsURL(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", oauthToken.AccessToken))
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch models: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	debug.Printf("Models response: HTTP %d\n", resp.StatusCode)
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("authentication failed: HTTP %d - please login again", resp.StatusCode)
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("models endpoint not found: HTTP %d", resp.StatusCode)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		debug.Printf("Models error response body: %s\n", string(body))
+		return nil, fmt.Errorf("failed to fetch models: HTTP %d - %s", resp.StatusCode, string(body))
+	}
+
+	// Read and parse response
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+	debug.Printf("Models response body: %s\n", string(bodyBytes))
+
+	var modelsResp ModelsResponse
+	if err := json.Unmarshal(bodyBytes, &modelsResp); err != nil {
+		return nil, fmt.Errorf("failed to decode models response: %w", err)
+	}
+
+	debug.Printf("Fetched %d models successfully\n", len(modelsResp.Data))
+
+	return modelsResp.Data, nil
+}

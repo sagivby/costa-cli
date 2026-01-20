@@ -39,6 +39,11 @@ func GetCodingTokenURL() string {
 	return GetBaseURL() + "/api/v1/tokens/coding_current"
 }
 
+// GetModelsURL returns the models list endpoint URL
+func GetModelsURL() string {
+	return GetBaseURL() + "/api/v1/models"
+}
+
 // OAuthConfig returns a configured oauth2.Config for reuse across the CLI
 func OAuthConfig() *oauth2.Config {
 	return &oauth2.Config{
