@@ -16,9 +16,12 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"os/user"
 
 	// Import sqlite3 driver for database/sql (pure-Go version that works without CGO)
 	_ "modernc.org/sqlite"
+
+	"github.com/zalando/go-keyring"
 
 	"github.com/costa-app/costa-cli/internal/auth"
 	"github.com/costa-app/costa-cli/internal/debug"
@@ -42,9 +45,9 @@ func (k *Kilo) Name() string {
 func (k *Kilo) Apply(ctx context.Context, opts integrations.ApplyOpts) (integrations.ApplyResult, error) {
 	result := integrations.ApplyResult{}
 
-	// Only support macOS for now
-	if runtime.GOOS != "darwin" {
-		return result, fmt.Errorf("Kilo setup is currently only supported on macOS")
+	// Support macOS and Linux
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		return result, fmt.Errorf("Kilo setup is currently only supported on macOS and Linux")
 	}
 
 	// Default to vscode if not specified
@@ -59,13 +62,13 @@ func (k *Kilo) Apply(ctx context.Context, opts integrations.ApplyOpts) (integrat
 	}
 
 	// Check if IDE is installed
-	ideName, processName := getIDENames(ide)
+	ideName, processNames := getIDENames(ide)
 	if !isIDEInstalled(ide) {
 		return result, fmt.Errorf("%s not found. Please install %s first", ideName, ideName)
 	}
 
 	// Check if IDE is running
-	if isIDERunning(processName) {
+	if isIDERunning(processNames) {
 		return result, fmt.Errorf("%s is running. Please close %s before running this command", ideName, ideName)
 	}
 
@@ -169,9 +172,9 @@ func (k *Kilo) Status(ctx context.Context, scope integrations.Scope) (integratio
 		Scope: scope,
 	}
 
-	// Only support macOS for now
-	if runtime.GOOS != "darwin" {
-		return result, fmt.Errorf("Kilo setup is currently only supported on macOS")
+	// Support macOS and Linux
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		return result, fmt.Errorf("Kilo setup is currently only supported on macOS and Linux")
 	}
 
 	// Default to vscode for status checks
@@ -244,25 +247,34 @@ func validateIDE(ide string) error {
 	return nil
 }
 
-// getIDENames returns the display name and process name for the IDE
-func getIDENames(ide string) (displayName string, processName string) {
+// getIDENames returns the display name and a list of process names for the IDE
+func getIDENames(ide string) (displayName string, processNames []string) {
 	switch ide {
 	case "vscode":
-		return "VS Code", "Code"
+		if runtime.GOOS == "darwin" {
+			return "VS Code", []string{"Code"}
+		}
+		return "VS Code", []string{"code", "code-oss", "codium", "vscodium"}
 	case "cursor":
-		return "Cursor", "Cursor"
+		return "Cursor", []string{"cursor"}
 	case "jetbrains":
-		return "JetBrains", "idea" // This will need refinement for different JetBrains IDEs
+		// This will need refinement for different JetBrains IDEs
+		return "JetBrains", []string{"idea", "pycharm", "webstorm", "goland"}
 	default:
-		return "Unknown", "unknown"
+		return "Unknown", []string{"unknown"}
 	}
 }
 
 func isIDEInstalled(ide string) bool {
 	switch ide {
 	case "vscode":
-		_, err := exec.LookPath("code")
-		return err == nil
+		candidates := []string{"code", "code-oss", "codium", "vscodium"}
+		for _, cmd := range candidates {
+			if _, err := exec.LookPath(cmd); err == nil {
+				return true
+			}
+		}
+		return false
 	case "cursor":
 		_, err := exec.LookPath("cursor")
 		return err == nil
@@ -279,22 +291,34 @@ func isIDEInstalled(ide string) bool {
 	}
 }
 
-func isIDERunning(processName string) bool {
-	cmd := exec.Command("pgrep", "-x", processName)
-	return cmd.Run() == nil
+func isIDERunning(processNames []string) bool {
+	for _, proc := range processNames {
+		cmd := exec.Command("pgrep", "-x", proc)
+		if cmd.Run() == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func getIDEVersion(ide string) string {
 	switch ide {
 	case "vscode":
-		cmd := exec.Command("code", "--version")
-		output, err := cmd.Output()
-		if err != nil {
+		candidates := []string{"code", "code-oss", "codium", "vscodium"}
+		for _, cmdName := range candidates {
+			if _, err := exec.LookPath(cmdName); err != nil {
+				continue
+			}
+			cmd := exec.Command(cmdName, "--version")
+			output, err := cmd.Output()
+			if err != nil {
+				return "unknown"
+			}
+			lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+			if len(lines) > 0 {
+				return lines[0]
+			}
 			return "unknown"
-		}
-		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-		if len(lines) > 0 {
-			return lines[0]
 		}
 		return "unknown"
 	case "cursor":
@@ -322,20 +346,39 @@ func getIDEDBPath(ide string) (string, error) {
 		return "", err
 	}
 
-	if runtime.GOOS != "darwin" {
-		return "", fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-	}
+	switch runtime.GOOS {
+	case "darwin":
+		switch ide {
+		case "vscode":
+			return filepath.Join(home, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb"), nil
+		case "cursor":
+			return filepath.Join(home, "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb"), nil
+		case "jetbrains":
+			// JetBrains uses different config structure - will need to be implemented
+			return "", fmt.Errorf("JetBrains configuration path not yet implemented")
+		default:
+			return "", fmt.Errorf("unsupported IDE: %s", ide)
+		}
+	case "linux":
+		configHome := os.Getenv("XDG_CONFIG_HOME")
+		if configHome == "" {
+			configHome = filepath.Join(home, ".config")
+		}
 
-	switch ide {
-	case "vscode":
-		return filepath.Join(home, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb"), nil
-	case "cursor":
-		return filepath.Join(home, "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb"), nil
-	case "jetbrains":
-		// JetBrains uses different config structure - will need to be implemented
-		return "", fmt.Errorf("JetBrains configuration path not yet implemented")
+		switch ide {
+		case "vscode":
+			return filepath.Join(configHome, "Code", "User", "globalStorage", "state.vscdb"), nil
+		case "cursor":
+			return filepath.Join(configHome, "Cursor", "User", "globalStorage", "state.vscdb"), nil
+		case "vscodium":
+			return filepath.Join(configHome, "VSCodium", "User", "globalStorage", "state.vscdb"), nil
+		case "jetbrains":
+			return "", fmt.Errorf("JetBrains configuration path not yet implemented")
+		default:
+			return "", fmt.Errorf("unsupported IDE: %s", ide)
+		}
 	default:
-		return "", fmt.Errorf("unsupported IDE: %s", ide)
+		return "", fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
 }
 
@@ -471,11 +514,12 @@ func setKiloAPIKeyInDB(dbPath, apiKey string) error {
 		return fmt.Errorf("missing Costa API key")
 	}
 
-	if runtime.GOOS != "darwin" {
-		return fmt.Errorf("Kilo API key setup is currently only supported on macOS")
+	// Support macOS and Linux
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		return fmt.Errorf("Kilo API key setup is currently only supported on macOS and Linux")
 	}
 
-	encrypted, err := encryptWithMacSafeStorage(apiKey)
+	encrypted, err := encryptWithSafeStorage(apiKey)
 	if err != nil {
 		return err
 	}
@@ -515,8 +559,8 @@ func setKiloAPIKeyInDB(dbPath, apiKey string) error {
 	return nil
 }
 
-func encryptWithMacSafeStorage(plaintext string) ([]byte, error) {
-	password, err := getMacSafeStoragePassword()
+func encryptWithSafeStorage(plaintext string) ([]byte, error) {
+	password, err := getSafeStoragePassword()
 	if err != nil {
 		return nil, err
 	}
@@ -536,6 +580,53 @@ func encryptWithMacSafeStorage(plaintext string) ([]byte, error) {
 
 	prefix := []byte("v10")
 	return append(prefix, ciphertext...), nil
+}
+
+func getSafeStoragePassword() (string, error) {
+	// Allow tests/CI to override via environment variable
+	if v := os.Getenv("COSTA_SAFE_STORAGE_PASSWORD"); v != "" {
+		return v, nil
+	}
+
+	if runtime.GOOS == "darwin" {
+		return getMacSafeStoragePassword()
+	}
+	if runtime.GOOS == "linux" {
+		return getLinuxSafeStoragePassword()
+	}
+	return "", fmt.Errorf("unsupported platform for safe storage: %s", runtime.GOOS)
+}
+
+func getLinuxSafeStoragePassword() (string, error) {
+	// Allow tests/CI to override via environment variable
+	if v := os.Getenv("COSTA_SAFE_STORAGE_PASSWORD"); v != "" {
+		return v, nil
+	}
+
+	services := []string{
+		"Code Safe Storage",
+		"Visual Studio Code Safe Storage",
+		"VS Code Safe Storage",
+		"Electron Safe Storage",
+		"Chrome Safe Storage",
+	}
+
+	currentUser, _ := user.Current()
+	accounts := []string{""}
+	if currentUser != nil {
+		accounts = append(accounts, currentUser.Username)
+	}
+
+	for _, service := range services {
+		for _, account := range accounts {
+			password, err := keyring.Get(service, account)
+			if err == nil && strings.TrimSpace(password) != "" {
+				return strings.TrimSpace(password), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("could not find VS Code safe storage key in keyring (tried common service names)")
 }
 
 func getMacSafeStoragePassword() (string, error) {

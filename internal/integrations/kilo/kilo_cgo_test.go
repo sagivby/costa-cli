@@ -58,8 +58,8 @@ func TestKiloSetupRunsWithoutCGO(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Get the module root

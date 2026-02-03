@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -94,10 +95,15 @@ func runSetupKilo(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Inform user about keychain access
+	// Inform user about keychain/keyring access
 	if !isJSONMode {
 		fmt.Fprintln(cmd.OutOrStdout(), "\nSetting up secure storage for your API key...")
-		fmt.Fprintln(cmd.OutOrStdout(), "macOS will ask for Keychain access so Costa can safely encrypt and store your credentials.")
+		if runtime.GOOS == "darwin" {
+			fmt.Fprintln(cmd.OutOrStdout(), "macOS will ask for Keychain access so Costa can safely encrypt and store your credentials.")
+		} else if runtime.GOOS == "linux" {
+			fmt.Fprintln(cmd.OutOrStdout(), "Linux will access your desktop keyring to retrieve VS Code's safe storage password.")
+			fmt.Fprintln(cmd.OutOrStdout(), "Make sure you have a desktop keyring service (like GNOME Keyring) running.")
+		}
 	}
 
 	// Phase 2: write (actual apply)
