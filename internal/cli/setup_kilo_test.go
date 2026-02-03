@@ -15,8 +15,8 @@ import (
 )
 
 func TestSetupKilo_DryRun(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory with mock VS Code database
@@ -76,8 +76,8 @@ func TestSetupKilo_DryRun(t *testing.T) {
 }
 
 func TestSetupKilo_ForceSkipsPrompts(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory with mock VS Code database
@@ -129,7 +129,14 @@ func TestSetupKilo_ForceSkipsPrompts(t *testing.T) {
 	}
 
 	// Verify database was updated
-	dbPath := filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	var dbPath string
+	if runtime.GOOS == "darwin" {
+		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	} else if runtime.GOOS == "linux" {
+		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
+	} else {
+		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
+	}
 	config := loadKiloConfigFromDB(t, dbPath)
 	if config == nil {
 		t.Fatal("Expected config to be created")
@@ -151,8 +158,8 @@ func TestSetupKilo_ForceSkipsPrompts(t *testing.T) {
 }
 
 func TestSetupKilo_AlreadyConfigured(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory with fully configured Kilo
@@ -223,8 +230,8 @@ func TestSetupKilo_AlreadyConfigured(t *testing.T) {
 }
 
 func TestSetupKilo_UpdateExistingConfig(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory with existing Kilo config that needs update
@@ -309,8 +316,8 @@ func TestSetupKilo_UpdateExistingConfig(t *testing.T) {
 }
 
 func TestSetupKilo_CustomBackupDir(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory with existing config
@@ -377,7 +384,14 @@ func TestSetupKilo_CustomBackupDir(t *testing.T) {
 		t.Errorf("Expected exactly one backup file, found: %d", len(entries))
 	}
 
-	dbPath := filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	var dbPath string
+	if runtime.GOOS == "darwin" {
+		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	} else if runtime.GOOS == "linux" {
+		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
+	} else {
+		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
+	}
 	secret := loadSecretBufferFromDB(t, dbPath, "kilocode.kilo-code", "openAiApiKey")
 	if len(secret) == 0 {
 		t.Errorf("Expected API key secret to be written, but it was empty")
@@ -385,8 +399,8 @@ func TestSetupKilo_CustomBackupDir(t *testing.T) {
 }
 
 func TestSetupKilo_WritesAPIKeySecret(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory
@@ -427,7 +441,14 @@ func TestSetupKilo_WritesAPIKeySecret(t *testing.T) {
 
 	output := outBuf.String()
 
-	dbPath := filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	var dbPath string
+	if runtime.GOOS == "darwin" {
+		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	} else if runtime.GOOS == "linux" {
+		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
+	} else {
+		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
+	}
 	secret := loadSecretBufferFromDB(t, dbPath, "kilocode.kilo-code", "openAiApiKey")
 	if len(secret) == 0 {
 		t.Errorf("Expected API key secret to be written, but it was empty")
@@ -439,8 +460,8 @@ func TestSetupKilo_WritesAPIKeySecret(t *testing.T) {
 }
 
 func TestSetupKilo_InvalidIDE(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory
@@ -480,8 +501,8 @@ func TestSetupKilo_InvalidIDE(t *testing.T) {
 }
 
 func TestSetupKilo_UnsupportedIDE(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory
@@ -521,8 +542,8 @@ func TestSetupKilo_UnsupportedIDE(t *testing.T) {
 }
 
 func TestSetupKilo_IDENotInstalled(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// This test can't guarantee VS Code is not installed
@@ -531,8 +552,8 @@ func TestSetupKilo_IDENotInstalled(t *testing.T) {
 }
 
 func TestSetupKilo_JSONFormat(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory with mock VS Code database
@@ -606,7 +627,14 @@ func TestSetupKilo_JSONFormat(t *testing.T) {
 		}
 
 		// Verify database was updated
-		dbPath := filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+		var dbPath string
+	if runtime.GOOS == "darwin" {
+		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	} else if runtime.GOOS == "linux" {
+		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
+	} else {
+		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
+	}
 		config := loadKiloConfigFromDB(t, dbPath)
 		if config == nil {
 			t.Fatal("Expected config to be created")
@@ -622,8 +650,8 @@ func TestSetupKilo_JSONFormat(t *testing.T) {
 }
 
 func TestSetupKilo_JSONFormat_DryRun(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory with mock VS Code database
@@ -683,7 +711,14 @@ func TestSetupKilo_JSONFormat_DryRun(t *testing.T) {
 	}
 
 	// Verify database was NOT modified
-	dbPath := filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	var dbPath string
+	if runtime.GOOS == "darwin" {
+		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+	} else if runtime.GOOS == "linux" {
+		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
+	} else {
+		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
+	}
 	config := loadKiloConfigFromDB(t, dbPath)
 	if config != nil {
 		t.Errorf("Expected database to remain empty in dry-run mode, but config was found")
@@ -691,8 +726,8 @@ func TestSetupKilo_JSONFormat_DryRun(t *testing.T) {
 }
 
 func TestSetupKilo_JSONFormat_AlreadyConfigured(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Kilo setup only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("Kilo setup only supported on macOS and Linux")
 	}
 
 	// Setup temp directory with fully configured Kilo
@@ -757,7 +792,14 @@ func TestSetupKilo_JSONFormat_AlreadyConfigured(t *testing.T) {
 func setupMockVSCodeDB(t *testing.T, tmpDir string, existingConfig map[string]any) string {
 	t.Helper()
 
-	dbDir := filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage")
+	var dbDir string
+	if runtime.GOOS == "darwin" {
+		dbDir = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage")
+	} else if runtime.GOOS == "linux" {
+		dbDir = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage")
+	} else {
+		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
+	}
 	dbPath := filepath.Join(dbDir, "state.vscdb")
 
 	// Create directory
