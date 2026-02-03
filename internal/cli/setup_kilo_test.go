@@ -130,11 +130,12 @@ func TestSetupKilo_ForceSkipsPrompts(t *testing.T) {
 
 	// Verify database was updated
 	var dbPath string
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
-	} else if runtime.GOOS == "linux" {
+	case "linux":
 		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
-	} else {
+	default:
 		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
 	}
 	config := loadKiloConfigFromDB(t, dbPath)
@@ -385,11 +386,12 @@ func TestSetupKilo_CustomBackupDir(t *testing.T) {
 	}
 
 	var dbPath string
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
-	} else if runtime.GOOS == "linux" {
+	case "linux":
 		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
-	} else {
+	default:
 		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
 	}
 	secret := loadSecretBufferFromDB(t, dbPath, "kilocode.kilo-code", "openAiApiKey")
@@ -442,11 +444,12 @@ func TestSetupKilo_WritesAPIKeySecret(t *testing.T) {
 	output := outBuf.String()
 
 	var dbPath string
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
-	} else if runtime.GOOS == "linux" {
+	case "linux":
 		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
-	} else {
+	default:
 		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
 	}
 	secret := loadSecretBufferFromDB(t, dbPath, "kilocode.kilo-code", "openAiApiKey")
@@ -628,13 +631,14 @@ func TestSetupKilo_JSONFormat(t *testing.T) {
 
 		// Verify database was updated
 		var dbPath string
-	if runtime.GOOS == "darwin" {
-		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
-	} else if runtime.GOOS == "linux" {
-		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
-	} else {
-		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
-	}
+		switch runtime.GOOS {
+		case "darwin":
+			dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
+		case "linux":
+			dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
+		default:
+			t.Fatalf("Unsupported platform: %s", runtime.GOOS)
+		}
 		config := loadKiloConfigFromDB(t, dbPath)
 		if config == nil {
 			t.Fatal("Expected config to be created")
@@ -712,11 +716,12 @@ func TestSetupKilo_JSONFormat_DryRun(t *testing.T) {
 
 	// Verify database was NOT modified
 	var dbPath string
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		dbPath = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage", "state.vscdb")
-	} else if runtime.GOOS == "linux" {
+	case "linux":
 		dbPath = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage", "state.vscdb")
-	} else {
+	default:
 		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
 	}
 	config := loadKiloConfigFromDB(t, dbPath)
@@ -793,11 +798,12 @@ func setupMockVSCodeDB(t *testing.T, tmpDir string, existingConfig map[string]an
 	t.Helper()
 
 	var dbDir string
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		dbDir = filepath.Join(tmpDir, "Library", "Application Support", "Code", "User", "globalStorage")
-	} else if runtime.GOOS == "linux" {
+	case "linux":
 		dbDir = filepath.Join(tmpDir, ".config", "Code", "User", "globalStorage")
-	} else {
+	default:
 		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
 	}
 	dbPath := filepath.Join(dbDir, "state.vscdb")

@@ -12,11 +12,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
-	"os/user"
 
 	// Import sqlite3 driver for database/sql (pure-Go version that works without CGO)
 	_ "modernc.org/sqlite"
@@ -293,6 +293,7 @@ func isIDEInstalled(ide string) bool {
 
 func isIDERunning(processNames []string) bool {
 	for _, proc := range processNames {
+		// #nosec G204 -- proc is a fixed string from our process names list
 		cmd := exec.Command("pgrep", "-x", proc)
 		if cmd.Run() == nil {
 			return true
@@ -309,6 +310,7 @@ func getIDEVersion(ide string) string {
 			if _, err := exec.LookPath(cmdName); err != nil {
 				continue
 			}
+			// #nosec G204 -- cmdName is selected from a fixed allowlist above
 			cmd := exec.Command(cmdName, "--version")
 			output, err := cmd.Output()
 			if err != nil {
@@ -322,6 +324,7 @@ func getIDEVersion(ide string) string {
 		}
 		return "unknown"
 	case "cursor":
+		// #nosec G204 -- "cursor" is a fixed string
 		cmd := exec.Command("cursor", "--version")
 		output, err := cmd.Output()
 		if err != nil {
