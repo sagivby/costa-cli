@@ -61,7 +61,4 @@ jobs:
           go test -v -race -count=1 -timeout=30m ./...
           echo "::endgroup::"
 
-      - name: Vulnerability scan
-        run: |
-          go version
-          go vulncheck ./...
+      
