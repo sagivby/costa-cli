@@ -15,18 +15,22 @@ install-tools:
 # Check if golangci-lint is installed, install if missing
 _ensure-golangci-lint:
     #!/usr/bin/env bash
-    if ! command -v golangci-lint &> /dev/null; then
-        echo "golangci-lint not found, installing..."
-        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-    fi
+    set -euo pipefail
+    version="v1.64.5"
+    mkdir -p .bin
+    echo "Installing golangci-lint ${version} with $(go version)..."
+    GOBIN="$PWD/.bin" go install "github.com/golangci/golangci-lint/cmd/golangci-lint@${version}"
+    "$PWD/.bin/golangci-lint" version
 
 # Check if govulncheck is installed, install if missing
 _ensure-govulncheck:
     #!/usr/bin/env bash
-    if ! command -v govulncheck &> /dev/null; then
-        echo "govulncheck not found, installing..."
-        go install golang.org/x/vuln/cmd/govulncheck@latest
-    fi
+    set -euo pipefail
+    version="v1.1.4"   # pick a version and pin it
+    mkdir -p .bin
+    echo "Installing govulncheck ${version} with $(go version)..."
+    GOBIN="$PWD/.bin" go install "golang.org/x/vuln/cmd/govulncheck@${version}"
+    "$PWD/.bin/govulncheck" -version || true
 
 # Build the costa binary
 build:
@@ -50,15 +54,15 @@ tidy:
 
 # Run golangci-lint
 lint: _ensure-golangci-lint
-    golangci-lint run
+    .bin/golangci-lint run
 
 # Fix linting issues automatically where possible
 lint-fix: _ensure-golangci-lint
-    golangci-lint run --fix
+    .bin/golangci-lint run --fix
 
 # Run vulnerability check
 vuln: _ensure-govulncheck
-    govulncheck ./...
+    .bin/govulncheck ./...
 
 # Run all checks (fmt, vet, tidy, lint, test, vuln) - same as CI
 ci: fmt vet tidy lint test vuln
