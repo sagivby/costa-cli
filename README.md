@@ -3,7 +3,6 @@
 Command-line tool for managing [Costa](https://costa.app) and integrating it with IDEs.
 
 
-
 [![Go Version](https://img.shields.io/badge/go-1.25-blue)](https://go.dev/)
 [![Lint](https://github.com/costa-app/costa-cli/workflows/lint/badge.svg)](https://github.com/costa-app/costa-cli/actions)
 [![Test](https://github.com/costa-app/costa-cli/workflows/test/badge.svg)](https://github.com/costa-app/costa-cli/actions)
