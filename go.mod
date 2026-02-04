@@ -1,8 +1,6 @@
 module github.com/costa-app/costa-cli
 
-go 1.25
-
-toolchain go1.25.5
+go 1.25.6
 
 require (
 	github.com/pelletier/go-toml/v2 v2.2.4
