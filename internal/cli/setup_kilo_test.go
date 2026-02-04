@@ -138,6 +138,15 @@ func TestSetupKilo_ForceSkipsPrompts(t *testing.T) {
 	default:
 		t.Fatalf("Unsupported platform: %s", runtime.GOOS)
 	}
+
+	// Debug: Print database path and check if file exists
+	t.Logf("Database path: %s", dbPath)
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		t.Logf("Database file does not exist!")
+	} else {
+		t.Logf("Database file exists")
+	}
+
 	config := loadKiloConfigFromDB(t, dbPath)
 	if config == nil {
 		t.Fatal("Expected config to be created")

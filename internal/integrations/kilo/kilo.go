@@ -519,10 +519,15 @@ func setKiloAPIKeyInDB(dbPath, apiKey string) error {
 		return fmt.Errorf("Kilo API key setup is currently only supported on macOS and Linux")
 	}
 
+	debug.Printf("DEBUG: Setting API key in database: %s", dbPath)
+	debug.Printf("DEBUG: COSTA_SAFE_STORAGE_PASSWORD env var = %q", os.Getenv("COSTA_SAFE_STORAGE_PASSWORD"))
+
 	encrypted, err := encryptWithSafeStorage(apiKey)
 	if err != nil {
+		debug.Printf("DEBUG: Failed to encrypt API key: %v", err)
 		return err
 	}
+	debug.Printf("DEBUG: Successfully encrypted API key")
 
 	payload := map[string]any{
 		"type": "Buffer",
@@ -535,6 +540,7 @@ func setKiloAPIKeyInDB(dbPath, apiKey string) error {
 
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
+		debug.Printf("DEBUG: Failed to open database: %v", err)
 		return err
 	}
 	defer func() {
@@ -544,8 +550,10 @@ func setKiloAPIKeyInDB(dbPath, apiKey string) error {
 	key := `secret://{"extensionId":"kilocode.kilo-code","key":"openAiApiKey"}`
 	var count int
 	if err := db.QueryRow("SELECT COUNT(*) FROM ItemTable WHERE key = ?", key).Scan(&count); err != nil {
+		debug.Printf("DEBUG: Failed to count existing secrets: %v", err)
 		return err
 	}
+	debug.Printf("DEBUG: Found %d existing secrets with key", count)
 
 	if count > 0 {
 		_, err = db.Exec("UPDATE ItemTable SET value = ? WHERE key = ?", string(payloadJSON), key)
@@ -553,21 +561,27 @@ func setKiloAPIKeyInDB(dbPath, apiKey string) error {
 		_, err = db.Exec("INSERT INTO ItemTable (key, value) VALUES (?, ?)", key, string(payloadJSON))
 	}
 	if err != nil {
+		debug.Printf("DEBUG: Failed to write secret to database: %v", err)
 		return err
 	}
+	debug.Printf("DEBUG: Successfully wrote secret to database")
 
 	return nil
 }
 
 func encryptWithSafeStorage(plaintext string) ([]byte, error) {
+	debug.Printf("DEBUG: Getting safe storage password")
 	password, err := getSafeStoragePassword()
 	if err != nil {
+		debug.Printf("DEBUG: Failed to get safe storage password: %v", err)
 		return nil, err
 	}
+	debug.Printf("DEBUG: Got safe storage password (length: %d)", len(password))
 
 	key := pbkdf2SHA1([]byte(password), []byte("saltysalt"), 1003, 16)
 	block, err := aes.NewCipher(key)
 	if err != nil {
+		debug.Printf("DEBUG: Failed to create cipher: %v", err)
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
 
@@ -579,7 +593,9 @@ func encryptWithSafeStorage(plaintext string) ([]byte, error) {
 	mode.CryptBlocks(ciphertext, padded)
 
 	prefix := []byte("v10")
-	return append(prefix, ciphertext...), nil
+	result := append(prefix, ciphertext...)
+	debug.Printf("DEBUG: Successfully encrypted data (length: %d)", len(result))
+	return result, nil
 }
 
 func getSafeStoragePassword() (string, error) {

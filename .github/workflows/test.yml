@@ -36,7 +36,7 @@ jobs:
       - name: Setup VS Code database structure
         run: |
           sudo apt-get update
-          sudo apt-get install -y sqlite3
+          sudo apt-get install -y sqlite3 libsecret-1-0 libsecret-1-dev
 
           # Create the VS Code database directory structure with proper permissions
           mkdir -p /home/runner/.config/Code/User/globalStorage
