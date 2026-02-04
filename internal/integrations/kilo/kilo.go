@@ -570,18 +570,14 @@ func setKiloAPIKeyInDB(dbPath, apiKey string) error {
 }
 
 func encryptWithSafeStorage(plaintext string) ([]byte, error) {
-	debug.Printf("DEBUG: Getting safe storage password")
 	password, err := getSafeStoragePassword()
 	if err != nil {
-		debug.Printf("DEBUG: Failed to get safe storage password: %v", err)
 		return nil, err
 	}
-	debug.Printf("DEBUG: Got safe storage password (length: %d)", len(password))
 
 	key := pbkdf2SHA1([]byte(password), []byte("saltysalt"), 1003, 16)
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		debug.Printf("DEBUG: Failed to create cipher: %v", err)
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
 
@@ -593,8 +589,9 @@ func encryptWithSafeStorage(plaintext string) ([]byte, error) {
 	mode.CryptBlocks(ciphertext, padded)
 
 	prefix := []byte("v10")
-	result := append(prefix, ciphertext...)
-	debug.Printf("DEBUG: Successfully encrypted data (length: %d)", len(result))
+	result := make([]byte, 0, len(prefix)+len(ciphertext))
+	result = append(result, prefix...)
+	result = append(result, ciphertext...)
 	return result, nil
 }
 
