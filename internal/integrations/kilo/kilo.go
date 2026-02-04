@@ -12,11 +12,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
-	"os/user"
 
 	// Import sqlite3 driver for database/sql (pure-Go version that works without CGO)
 	_ "modernc.org/sqlite"
@@ -293,7 +293,7 @@ func isIDEInstalled(ide string) bool {
 
 func isIDERunning(processNames []string) bool {
 	for _, proc := range processNames {
-		cmd := exec.Command("pgrep", "-x", proc)
+		cmd := exec.Command("pgrep", "-x", proc) // #nosec G204
 		if cmd.Run() == nil {
 			return true
 		}
@@ -309,7 +309,7 @@ func getIDEVersion(ide string) string {
 			if _, err := exec.LookPath(cmdName); err != nil {
 				continue
 			}
-			cmd := exec.Command(cmdName, "--version")
+			cmd := exec.Command(cmdName, "--version") // #nosec G204
 			output, err := cmd.Output()
 			if err != nil {
 				return "unknown"
@@ -322,7 +322,7 @@ func getIDEVersion(ide string) string {
 		}
 		return "unknown"
 	case "cursor":
-		cmd := exec.Command("cursor", "--version")
+		cmd := exec.Command("cursor", "--version") // #nosec G204
 		output, err := cmd.Output()
 		if err != nil {
 			return "unknown"
@@ -649,7 +649,7 @@ func getMacSafeStoragePassword() (string, error) {
 
 	for _, service := range services {
 		// #nosec G204 -- service is selected from a fixed allowlist above.
-		out, err := exec.Command("security", "find-generic-password", "-s", service, "-w").Output()
+		out, err := exec.Command("security", "find-generic-password", "-s", service, "-w").Output() // #nosec G204
 		if err != nil {
 			continue
 		}
