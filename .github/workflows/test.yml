@@ -38,12 +38,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y sqlite3
 
-          # Create the VS Code database directory structure
+          # Create the VS Code database directory structure with proper permissions
           mkdir -p /home/runner/.config/Code/User/globalStorage
+          chmod 755 /home/runner/.config
+          chmod 755 /home/runner/.config/Code
+          chmod 755 /home/runner/.config/Code/User
+          chmod 755 /home/runner/.config/Code/User/globalStorage
 
           # Create a minimal SQLite database with the required table structure
           sqlite3 /home/runner/.config/Code/User/globalStorage/state.vscdb \
             "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT);"
+
+          # Set proper permissions on the database file
+          chmod 644 /home/runner/.config/Code/User/globalStorage/state.vscdb
 
       - name: Run tests
         id: test

@@ -106,6 +106,7 @@ func TestKiloSetupRunsWithoutCGO(t *testing.T) {
 	outputStr := string(output)
 
 	// Check for the specific CGO error that was reported in the issue
+	// Only look for actual error messages, not paths that contain "cgo"
 	if strings.Contains(outputStr, "go-sqlite3 requires cgo to work") {
 		t.Fatalf("Command failed with CGO error (the bug from issue #19):\n%s", outputStr)
 	}
@@ -114,7 +115,12 @@ func TestKiloSetupRunsWithoutCGO(t *testing.T) {
 		t.Fatalf("Command failed with CGO stub error (the bug from issue #19):\n%s", outputStr)
 	}
 
-	if strings.Contains(strings.ToLower(outputStr), "cgo") {
+	// More specific check for CGO errors - look for actual error context
+	if strings.Contains(outputStr, "cgo failed") ||
+		strings.Contains(outputStr, "CGO_ENABLED") ||
+		(strings.Contains(strings.ToLower(outputStr), "cgo") &&
+			(strings.Contains(strings.ToLower(outputStr), "error") ||
+				strings.Contains(strings.ToLower(outputStr), "failed"))) {
 		t.Fatalf("Command failed with CGO-related error (the bug from issue #19):\n%s", outputStr)
 	}
 
