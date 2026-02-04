@@ -33,6 +33,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y code
 
+      - name: Setup VS Code database structure
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+
+          # Create the VS Code database directory structure
+          mkdir -p /home/runner/.config/Code/User/globalStorage
+
+          # Create a minimal SQLite database with the required table structure
+          sqlite3 /home/runner/.config/Code/User/globalStorage/state.vscdb \
+            "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT);"
+
       - name: Run tests
         id: test
         env:
